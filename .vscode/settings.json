@@ -1,0 +1,11 @@
+{
+    "javascript.validate.enable": false,
+    "standard.options": {
+        "envs": [
+            "jest"
+        ]
+    },
+    "standard.semistandard": true,
+    "editor.tabSize": 2,
+    "editor.useTabStops": false
+}

@@ -1,0 +1,41 @@
+{
+  "name": "myinfo",
+  "version": "1.0.0",
+  "description": "Just another MindMap SW",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/.bin/mocha --require @babel/register \"./src/**/*.test.js\"",
+    "start": "nodemon --exec babel-node ./src/index.js",
+    "build": "babel src --out-dir ./dist --source-maps",
+    "serve": "node ./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/perdevpernull/myinfo-new.git"
+  },
+  "keywords": [
+    "mindmap",
+    "thebrain",
+    "plugin",
+    "layout",
+    "dataset",
+    "general",
+    "purpose"
+  ],
+  "author": "/dev/null",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/perdevpernull/myinfo-new/issues"
+  },
+  "homepage": "https://github.com/perdevpernull/myinfo-new#readme",
+  "devDependencies": {
+    "@babel/cli": "^7.2.3",
+    "@babel/core": "^7.2.2",
+    "@babel/node": "^7.2.2",
+    "@babel/preset-env": "^7.2.3",
+    "@babel/register": "^7.0.0",
+    "chai": "^4.2.0",
+    "mocha": "^5.2.0",
+    "nodemon": "^1.18.9"
+  }
+}
