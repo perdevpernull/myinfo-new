@@ -37,5 +37,9 @@
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
     "nodemon": "^1.18.9"
+  },
+  "babel": {
+    "presets": ["@babel/preset-env"],
+    "sourceMaps": "inline"
   }
 }
