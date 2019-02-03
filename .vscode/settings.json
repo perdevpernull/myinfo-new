@@ -6,6 +6,7 @@
         ]
     },
     "standard.semistandard": true,
+    "editor.detectIndentation": false,
     "editor.tabSize": 2,
     "editor.useTabStops": false
 }

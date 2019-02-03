@@ -1,9 +1,11 @@
 function dataset (jsonData) {
-  let _private_ = {};
+  const _private_ = {};
 
   class Dataset {
     constructor (jsonData) {
       if (jsonData && jsonData.nextNodeID) {
+        // ToDo: Before storing the jsonData we should validate the schema (e.g. https://github.com/hapijs/joi)
+        // ToDo: Or maybe outside of the class before calling new decide if the schema is valid or not!?
         _private_.data = jsonData;
       } else {
         _private_.data = {
@@ -38,48 +40,413 @@ function dataset (jsonData) {
     }
 
     getJsonData () {
-      return JSON.stringify(this._data);
+      return JSON.stringify(_private_.data);
     }
 
-    addNode (text) {
-      var nodeID = this._data.nextNodeID;
-      this._data.nextNodeID = this._data.nextNodeID + 1;
-      this._data.nodes[`ID${nodeID}`] = {
-        ID: nodeID,
+    getTypePair (type) {
+      return (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : 'friend');
+    }
+
+    // Node functions ADD
+    addNode (text, tags = []) {
+      const newNodeID = _private_.data.nextNodeID;
+      _private_.data.nextNodeID = _private_.data.nextNodeID + 1;
+      _private_.data.nodes[`ID${newNodeID}`] = {
+        ID: newNodeID,
         text: text,
         links: [],
-        tags: [],
+        tags: tags,
         deleted: false
       };
 
-      this._data.rootNodes[`ID${nodeID}`] = nodeID;
+      _private_.data.rootNodes[`ID${newNodeID}`] = newNodeID;
 
-      return nodeID;
+      return newNodeID;
     }
 
-    addChildNode (nodeID, text) {
-      var childNodeID = this.addNode(text);
-      this.addChildLink(nodeID, childNodeID);
+    addChildNode (nodeID, text, tags = []) {
+      const newChildNodeID = this.addNode(text, tags);
+      this.addChildLink(nodeID, newChildNodeID);
 
-      return childNodeID;
+      return newChildNodeID;
     }
 
-    addParentNode (nodeID, text) {
-      var parentNodeID = this.addNode(text);
-      this.addParentLink(nodeID, parentNodeID);
+    addParentNode (nodeID, text, tags = []) {
+      const newParentNodeID = this.addNode(text, tags);
+      this.addParentLink(nodeID, newParentNodeID);
 
-      return parentNodeID;
+      return newParentNodeID;
     }
 
-    addFriendNode (nodeID, text) {
-      var friendNodeID = this.addNode(text);
-      this.addFriendLink(nodeID, friendNodeID);
+    addFriendNode (nodeID, text, tags = []) {
+      const newFriendNodeID = this.addNode(text, tags);
+      this.addFriendLink(nodeID, newFriendNodeID);
 
-      return friendNodeID;
+      return newFriendNodeID;
     }
 
+    // Node functions DELETE
+    deleteNode (nodeID) {
+      if (!_private_.data.nodes[`ID${nodeID}`]) {
+        // We cannot delete a non-existent node.
+        return false;
+      } else {
+        if (_private_.data.nodes[`ID${nodeID}`].deleted) {
+          // We cannot delete an already deleted node.
+          return false;
+        } else {
+          let toID;
+          let type;
+          let typePair;
+          let linkIndex;
+
+          _private_.data.nodes[`ID${nodeID}`].deleted = true;
+
+          for (let i in _private_.data.nodes[`ID${nodeID}`].links) {
+            if (!_private_.data.nodes[`ID${nodeID}`].links[i].deleted) {
+              _private_.data.nodes[`ID${nodeID}`].links[i].deleted = true;
+
+              toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
+              type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
+              typePair = this.getTypePair(type);
+
+              linkIndex = _private_.data.nodes[`ID${toID}`].links.findIndex(function (link) {
+                return ((link.toID === nodeID) && (link.type === typePair));
+              });
+              _private_.data.nodes[`ID${toID}`].links[linkIndex].deleted = true;
+
+              if (type === 'child') {
+                if (!this.hasParentLinks(toID)) {
+                  _private_.data.rootNodes[`ID${toID}`] = toID;
+                }
+              }
+            }
+          }
+
+          delete _private_.data.rootNodes[`ID${nodeID}`];
+
+          return true;
+        }
+      }
+    }
+
+    undeleteNode (nodeID) {
+      if (!_private_.data.nodes[`ID${nodeID}`]) {
+        // We cannot undelete a non-existent node.
+        return false;
+      } else {
+        if (!_private_.data.nodes[`ID${nodeID}`].deleted) {
+          // We cannot undelete a non-deleted node.
+          return false;
+        } else {
+          let toID;
+          let type;
+          let typePair;
+          let linkIndex;
+
+          _private_.data.nodes[`ID${nodeID}`].deleted = false;
+
+          for (let i in _private_.data.nodes[`ID${nodeID}`].links) {
+            toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
+            if (!this.isDeletedNode(toID)) {
+              _private_.data.nodes[`ID${nodeID}`].links[i].deleted = false;
+
+              type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
+              typePair = this.getTypePair(type);
+
+              linkIndex = _private_.data.nodes[`ID${toID}`].links.findIndex(function (link) {
+                return ((link.toID === nodeID) && (link.type === typePair));
+              });
+              _private_.data.nodes[`ID${toID}`].links[linkIndex].deleted = false;
+
+              if (typePair === 'parent') {
+                delete _private_.data.rootNodes[`ID${toID}`];
+              }
+            }
+          }
+
+          if (!this.hasParentLinks(nodeID)) {
+            _private_.data.rootNodes[`ID${nodeID}`] = nodeID;
+          }
+
+          return true;
+        }
+      }
+    }
+
+    purgeNode (nodeID) {
+      if (!_private_.data.nodes[`ID${nodeID}`]) {
+        // We cannot purge a non-existent node.
+        return false;
+      } else {
+        if (!_private_.data.nodes[`ID${nodeID}`].deleted) {
+          // We cannot purge a non-deleted node.
+          return false;
+        } else {
+          let toID;
+          let type;
+
+          for (let i in _private_.data.nodes[`ID${nodeID}`].links) {
+            toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
+            type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
+            this.purgeLink(nodeID, toID, type);
+          }
+
+          delete _private_.data.nodes[`ID${nodeID}`];
+
+          return true;
+        }
+      }
+    }
+
+    // Node functions QUERY
+    getConnectedNodes (nodeID, type, tags = [], deleted = false) {
+      return this.getConnectedNodesBulk([nodeID], type, tags, deleted);
+    }
+
+    getConnectedNodesBulk (nodeIDs, type, tags = [], deleted = false) {
+      let result = [];
+
+      if (type === 'sibling') {
+        let parentNodeIDs = this.getConnectedNodesBulk(nodeIDs, 'parent', tags, deleted);
+        result = this.getConnectedNodesBulk(parentNodeIDs, 'child', tags, deleted).filter((value) => (nodeIDs.indexOf(value) < 0));
+      } else {
+        for (let i in nodeIDs) {
+          for (let j in _private_.data.nodes[`ID${nodeIDs[i]}`].links) {
+            let link = _private_.data.nodes[`ID${nodeIDs[i]}`].links[j];
+            if ((link.deleted === deleted) && ((!type) || (link.type === type)) && (tags.every((value) => (link.tags.indexOf(value) >= 0)))) {
+              result.push(link.toID);
+            }
+          }
+        }
+      }
+
+      return result;
+    }
+
+    isDeletedNode (nodeID) {
+      return _private_.data.nodes[`ID${nodeID}`].deleted;
+    }
+
+    // Link functions ADD
+    addLink (nodeID1, nodeID2, type, tags = []) {
+      if (this.isLinked(nodeID1, nodeID2, type)) {
+        // Link already exists
+        if (this.isDeletedLink(nodeID1, nodeID2, type)) {
+          // The link is deleted
+          return this.undeleteLink(nodeID1, nodeID2, type);
+        } else {
+          return false;
+        }
+      } else {
+        if (type === 'parent') {
+          return this.addLink(nodeID2, nodeID1, 'child', tags);
+        } else {
+          // type can only be 'child' or 'friend'
+          let deleted = (_private_.data.nodes[`ID${nodeID1}`].deleted || _private_.data.nodes[`ID${nodeID2}`].deleted);
+
+          if (type === 'child') {
+            delete _private_.data.rootNodes[`ID${nodeID2}`];
+          }
+
+          _private_.data.nodes[`ID${nodeID1}`].links.push(
+            { toID: nodeID2, type: type, tags: tags, deleted: deleted }
+          );
+          _private_.data.nodes[`ID${nodeID2}`].links.push(
+            { toID: nodeID1, type: this.getTypePair(type), tags: tags, deleted: deleted }
+          );
+
+          return true;
+        }
+      }
+    }
+
+    addChildLink (parentNodeID, childNodeID, tags = []) {
+      return this.addLink(parentNodeID, childNodeID, 'child', tags);
+    }
+
+    addParentLink (childNodeID, parentNodeID, tags = []) {
+      return this.addLink(parentNodeID, childNodeID, 'child', tags);
+    }
+
+    addFriendLink (nodeID1, nodeID2, tags = []) {
+      return this.addLink(nodeID1, nodeID2, 'friend', tags);
+    }
+
+    // Link functions DELETE
+    deleteLink (nodeID1, nodeID2, type) {
+      if (!this.isLinked(nodeID1, nodeID2, type)) {
+        // We cannot delete nonexistent link.
+        return false;
+      } else {
+        if (this.isDeletedLink(nodeID1, nodeID2, type)) {
+          // We cannot delete an already deleted link
+          return false;
+        } else {
+          if (type === 'parent') {
+            this.deleteLink(nodeID2, nodeID1, 'child');
+          } else {
+            // type can only be 'child' or 'friend'
+            let linkIndex;
+
+            linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID2) && (link.type === type));
+            });
+            if (!_private_.data.nodes[`ID${nodeID1}`].links[linkIndex].deleted) {
+              _private_.data.nodes[`ID${nodeID1}`].links[linkIndex].deleted = true;
+            } else {
+              return false;
+            }
+
+            const typePair = this.getTypePair(type);
+            linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID1) && (link.type === typePair));
+            });
+            if (!_private_.data.nodes[`ID${nodeID2}`].links[linkIndex].deleted) {
+              _private_.data.nodes[`ID${nodeID2}`].links[linkIndex].deleted = true;
+            } else {
+              return false;
+            }
+
+            if (type === 'child') {
+              if (!this.hasParentLinks(nodeID2)) {
+                _private_.data.rootNodes[`ID${nodeID2}`] = nodeID2;
+              }
+            }
+
+            return true;
+          }
+        }
+      }
+    }
+
+    undeleteLink (nodeID1, nodeID2, type) {
+      if (!this.isLinked(nodeID1, nodeID2, type)) {
+        // We cannot undelete nonexistent link.
+        return false;
+      } else {
+        if (!this.isDeletedLink(nodeID1, nodeID2, type)) {
+          // We cannot undelete a non-deleted link.
+          return false;
+        } else {
+          if (type === 'parent') {
+            this.undeleteLink(nodeID2, nodeID1, 'child');
+          } else {
+            // type can only be 'child' or 'friend'
+            let linkIndex;
+
+            linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID2) && (link.type === type));
+            });
+            if (_private_.data.nodes[`ID${nodeID1}`].links[linkIndex].deleted) {
+              _private_.data.nodes[`ID${nodeID1}`].links[linkIndex].deleted = false;
+            } else {
+              return false;
+            }
+
+            const typePair = this.getTypePair(type);
+            linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID1) && (link.type === typePair));
+            });
+            if (_private_.data.nodes[`ID${nodeID2}`].links[linkIndex].deleted) {
+              _private_.data.nodes[`ID${nodeID2}`].links[linkIndex].deleted = false;
+            } else {
+              return false;
+            }
+
+            if (type === 'child') {
+              delete _private_.data.rootNodes[`ID${nodeID2}`];
+            }
+
+            return true;
+          }
+        }
+      }
+    }
+
+    purgeLink (nodeID1, nodeID2, type) { // Csak törölt státuszút lehet véglegesen törölni.
+      if (!this.isLinked(nodeID1, nodeID2, type)) {
+        // We cannot purge nonexistent link.
+        return false;
+      } else {
+        if (!this.isDeletedLink(nodeID1, nodeID2, type)) {
+          // We cannot purge a non-deleted link.
+          return false;
+        } else {
+          if (type === 'parent') {
+            // ToDo: This should be checked first.
+            return this.purgeLink(nodeID2, nodeID1, 'child');
+          } else {
+            // type can only be 'child' or 'friend'
+            let linkIndex;
+            let typePair = this.getTypePair(type);
+
+            linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID2) && (link.type === type));
+            });
+            if (!_private_.data.nodes[`ID${nodeID1}`].links[linkIndex].deleted) {
+              // We cannot purge nondeleted link.
+              return false;
+            } else {
+              _private_.data.nodes[`ID${nodeID1}`].links.splice(linkIndex, 1);
+            }
+
+            linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+              return ((link.toID === nodeID1) && (link.type === typePair));
+            });
+            if (!_private_.data.nodes[`ID${nodeID2}`].links[linkIndex].deleted) {
+              // We cannot purge nondeleted link.
+              return false;
+            } else {
+              _private_.data.nodes[`ID${nodeID2}`].links.splice(linkIndex, 1);
+            }
+
+            return true;
+          }
+        }
+      }
+    }
+
+    // Link functions QUERY
+    isLinked (nodeID1, nodeID2, type) { // Törölt státuszúakat is vizsgálja.
+      return (_private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+        return ((link.toID === nodeID2) && (link.type === type));
+      }) > -1);
+    }
+
+    isDeletedLink (nodeID1, nodeID2, type) {
+      return (_private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+        return ((link.toID === nodeID2) && (link.type === type) && (link.deleted));
+      }) > -1);
+    }
+
+    // NodeTag functions ADD
+    addNodeTag (nodeID, tag) {
+      if (!this.isTagExists(tag)) {
+        _private_.data.tags[tag] = tag;
+      }
+
+      if (this.isNodeTagged(nodeID, tag)) {
+        return false;
+      } else {
+        _private_.data.nodes[`ID${nodeID}`].tags.push(tag);
+
+        return true;
+      }
+    }
+
+    // Tag functions QUERY
+    isTagExists (tag) {
+      if (_private_.data.tags[tag]) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    // --> Cleared until this point.
     getRootNodeIDs () {
-      return this._data.rootNodes;
+      return _private_.data.rootNodes;
     }
 
     findOrphanNodeIDs () {
@@ -92,8 +459,8 @@ function dataset (jsonData) {
       var rootOrHasParentNodes;
       var keys;
 
-      for (var key in this._data.nodes) {
-        ID = this._data.nodes[key].ID;
+      for (let key in _private_.data.nodes) {
+        ID = _private_.data.nodes[key].ID;
         if (!this.isDeleted(ID)) {
           childLinks = this.getChildLinks(ID);
           childLinkIDs = [];
@@ -105,14 +472,14 @@ function dataset (jsonData) {
       }
 
       rootOrHasParentNodes = [];
-      for (var key in this._data.rootNodes) {
-        rootOrHasParentNodes.push(this._data.rootNodes[key]);
+      for (let key in _private_.data.rootNodes) {
+        rootOrHasParentNodes.push(_private_.data.rootNodes[key]);
       }
 
       while (rootOrHasParentNodes.length > 0) {
         ID = rootOrHasParentNodes[0];
         if (possibleOrphanNodes[`ID${ID}`]) {
-          for (var i in possibleOrphanNodes[`ID${ID}`].childLinkIDs) {
+          for (let i in possibleOrphanNodes[`ID${ID}`].childLinkIDs) {
             rootOrHasParentNodes.push(possibleOrphanNodes[`ID${ID}`].childLinkIDs[i]);
           }
           delete possibleOrphanNodes[`ID${ID}`];
@@ -126,7 +493,7 @@ function dataset (jsonData) {
         orphanNodeKeys[`ID${ID}`] = ID;
 
         rootOrHasParentNodes = [];
-        for (var i in possibleOrphanNodes[keys[0]].childLinkIDs) {
+        for (let i in possibleOrphanNodes[keys[0]].childLinkIDs) {
           rootOrHasParentNodes.push(possibleOrphanNodes[keys[0]].childLinkIDs[i]);
         }
         delete possibleOrphanNodes[keys[0]];
@@ -134,7 +501,7 @@ function dataset (jsonData) {
         while (rootOrHasParentNodes.length > 0) {
           ID = rootOrHasParentNodes[0];
           if (possibleOrphanNodes[`ID${ID}`]) {
-            for (var i in possibleOrphanNodes[`ID${ID}`].childLinkIDs) {
+            for (let i in possibleOrphanNodes[`ID${ID}`].childLinkIDs) {
               rootOrHasParentNodes.push(possibleOrphanNodes[`ID${ID}`].childLinkIDs[i]);
             }
             delete possibleOrphanNodes[`ID${ID}`];
@@ -144,253 +511,25 @@ function dataset (jsonData) {
         keys = Object.keys(possibleOrphanNodes);
       }
 
-      for (key in orphanNodeKeys) {
-        orphanNodeIDs.push(this._data.nodes[key].ID);
+      for (let key in orphanNodeKeys) {
+        orphanNodeIDs.push(_private_.data.nodes[key].ID);
       }
       return orphanNodeIDs;
     }
 
-    deleteNode (nodeID) {
-      var toID;
-      var type;
-      var typePair;
-      var linkIndex;
-
-      if (this._data.nodes[`ID${nodeID}`].deleted) {
-        return false;
-      } else {
-        this._data.nodes[`ID${nodeID}`].deleted = true;
-
-        for (var i in this._data.nodes[`ID${nodeID}`].links) {
-          if (!this._data.nodes[`ID${nodeID}`].links[i].deleted) {
-            this._data.nodes[`ID${nodeID}`].links[i].deleted = true;
-
-            toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
-            type = this._data.nodes[`ID${nodeID}`].links[i].type;
-            typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
-
-            linkIndex = this._data.nodes[`ID${toID}`].links.findIndex(function (link) {
-              return ((link.toID === nodeID) && (link.type === typePair));
-            });
-            this._data.nodes[`ID${toID}`].links[linkIndex].deleted = true;
-
-            if (type === 'child') {
-              if (!this.hasParentLinks(toID)) {
-                this._data.rootNodes[`ID${toID}`] = toID;
-              }
-            }
-          }
-        }
-
-        delete this._data.rootNodes[`ID${nodeID}`];
-
-        return true;
-      }
-    }
-
-    undeleteNode (nodeID) {
-      var toID;
-      var type;
-      var typePair;
-      var linkIndex;
-
-      if (this._data.nodes[`ID${nodeID}`].deleted) {
-        this._data.nodes[`ID${nodeID}`].deleted = false;
-
-        for (var i in this._data.nodes[`ID${nodeID}`].links) {
-          toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
-          if (!this.isDeleted(toID)) {
-            this._data.nodes[`ID${nodeID}`].links[i].deleted = false;
-
-            type = this._data.nodes[`ID${nodeID}`].links[i].type;
-            typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
-
-            linkIndex = this._data.nodes[`ID${toID}`].links.findIndex(function (link) {
-              return ((link.toID === nodeID) && (link.type === typePair));
-            });
-            this._data.nodes[`ID${toID}`].links[linkIndex].deleted = false;
-
-            if (typePair === 'parent') {
-              delete this._data.rootNodes[`ID${toID}`];
-            }
-          }
-        }
-
-        if (!this.hasParentLinks(nodeID)) {
-          this._data.rootNodes[`ID${nodeID}`] = nodeID;
-        }
-
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    purgeNode (nodeID) {
-      var toID;
-      var type;
-
-      if (this._data.nodes[`ID${nodeID}`].deleted) {
-        for (var i in this._data.nodes[`ID${nodeID}`].links) {
-          toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
-          type = this._data.nodes[`ID${nodeID}`].links[i].type;
-          this.purgeLink(nodeID, toID, type);
-        }
-
-        delete this._data.nodes[`ID${nodeID}`];
-
-        return true;
-      } else {
-        // Only deleted nodes can be purged.
-        return false;
-      }
-    }
-
-    isLinked (nodeID1, nodeID2, type) { // Törölt státuszúakat is vizsgálja.
-      return (this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
-        return ((link.toID === nodeID2) && (link.type === type));
-      }) > -1);
-    }
-
-    addChildLink (parentNodeID, childNodeID) {
-      var deleted = (this._data.nodes[`ID${parentNodeID}`].deleted || this._data.nodes[`ID${childNodeID}`].deleted);
-
-      delete this._data.rootNodes[`ID${childNodeID}`];
-
-      if (this.isLinked(parentNodeID, childNodeID, 'child')) {
-        return false;
-      } else {
-        this._data.nodes[`ID${parentNodeID}`].links.push(
-          { toID: childNodeID, type: 'child', tags: [], deleted: deleted }
-        );
-        this._data.nodes[`ID${childNodeID}`].links.push(
-          { toID: parentNodeID, type: 'parent', tags: [], deleted: deleted }
-        );
-
-        return true;
-      }
-    }
-
-    addParentLink (childNodeID, parentNodeID) {
-      if (this.isLinked(parentNodeID, childNodeID, 'parent')) {
-        return false;
-      } else {
-        this.addChildLink(parentNodeID, childNodeID);
-
-        return true;
-      }
-    }
-
-    addFriendLink (nodeID1, nodeID2) {
-      var deleted = (this._data.nodes[`ID${nodeID1}`].deleted || this._data.nodes[`ID${nodeID2}`].deleted);
-
-      if (this.isLinked(nodeID1, nodeID2, 'friend')) {
-        return false;
-      } else {
-        this._data.nodes[`ID${nodeID1}`].links.push(
-          { toID: nodeID2, type: 'friend', tags: [], deleted: deleted }
-        );
-        this._data.nodes[`ID${nodeID2}`].links.push(
-          { toID: nodeID1, type: 'friend', tags: [], deleted: deleted }
-        );
-
-        return true;
-      }
-    }
-
-    addLink (nodeID1, nodeID2, type) {
-      switch (type) {
-        case 'child':
-          return this.addChildLink(nodeID1, nodeID2);
-          break;
-        case 'parent':
-          return this.addParentLink(nodeID1, nodeID2);
-          break;
-        case 'friend':
-          return this.addFriendLink(nodeID1, nodeID2);
-          break;
-        default:
-          return false;
-      }
-    }
-
-    purgeLink (nodeID1, nodeID2, type) { // Törölt státuszút is lehet véglegesen törölni.
-      var linkIndex;
-      var typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
-
-      if (this.isLinked(nodeID1, nodeID2, type)) {
-        linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
-          return ((link.toID === nodeID2) && (link.type === type));
-        });
-        this._data.nodes[`ID${nodeID1}`].links.splice(linkIndex, 1);
-
-        linkIndex = this._data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
-          return ((link.toID === nodeID1) && (link.type === typePair));
-        });
-        this._data.nodes[`ID${nodeID2}`].links.splice(linkIndex, 1);
-
-        switch (type) {
-          case 'child':
-            if (!this.hasParentLinks(nodeID2)) {
-              this._data.rootNodes[`ID${nodeID2}`] = nodeID2;
-            }
-            break;
-          case 'parent':
-            if (!this.hasParentLinks(nodeID1)) {
-              this._data.rootNodes[`ID${nodeID1}`] = nodeID1;
-            }
-            break;
-        }
-
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    isDeleted (nodeID) {
-      if (this._data.nodes[`ID${nodeID}`].deleted) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    isTagExists (tag) {
-      if (this._data.tags[tag]) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-
     isNodeTagged (nodeID, tag) {
-      return (this._data.nodes[`ID${nodeID}`].tags.findIndex(function (elmement) {
+      return (_private_.data.nodes[`ID${nodeID}`].tags.findIndex(function (element) {
         return (element === tag);
       }) > -1);
     }
 
-    addNodeTag (nodeID, tag) {
-      if (!this.isTagExists(tag)) {
-        this._data.tags[tag] = tag;
-      }
-
-      if (this.isNodeTagged(nodeID, tag)) {
-        return false;
-      } else {
-        this._data.nodes[`ID${nodeID}`].tags.push(tag);
-
-        return true;
-      }
-    }
-
     isLinkTagged (nodeID1, nodeID2, type, tag) {
-      var linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+      var linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
         return ((link.toID === nodeID2) && (link.type === type));
       });
 
       if (linkIndex > -1) {
-        if (this._data.nodes[`ID${nodeID1}`].links[linkIndex].tags.findIndex(function (element) {
+        if (_private_.data.nodes[`ID${nodeID1}`].links[linkIndex].tags.findIndex(function (element) {
           return (element === tag);
         }
         ) > -1) {
@@ -416,30 +555,30 @@ function dataset (jsonData) {
       }
 
       if (!this.isTagExists(tag)) {
-        this._data.tags[tag] = tag;
+        _private_.data.tags[tag] = tag;
       }
 
-      linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+      linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
         return ((link.toID === nodeID2) && (link.type === type));
       });
-      this._data.nodes[`ID${nodeID1}`].links[linkIndex].tags.push(tag);
+      _private_.data.nodes[`ID${nodeID1}`].links[linkIndex].tags.push(tag);
 
-      linkIndex = this._data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+      linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
         return ((link.toID === nodeID1) && (link.type === typePair));
       });
-      this._data.nodes[`ID${nodeID2}`].links[linkIndex].tags.push(tag);
+      _private_.data.nodes[`ID${nodeID2}`].links[linkIndex].tags.push(tag);
 
       return true;
     }
 
     getLinks (nodeID) {
-      return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+      return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
         return (link.deleted === false);
       });
     }
 
     getChildLinks (nodeID) {
-      return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+      return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
         return (link.type === 'child' && link.deleted === false);
       });
     }
@@ -449,7 +588,7 @@ function dataset (jsonData) {
     }
 
     getParentLinks (nodeID) {
-      return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+      return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
         return (link.type === 'parent' && link.deleted === false);
       });
     }
@@ -459,7 +598,7 @@ function dataset (jsonData) {
     }
 
     getFriendLinks (nodeID) {
-      return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+      return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
         return (link.type === 'friend' && link.deleted === false);
       });
     }
@@ -470,21 +609,19 @@ function dataset (jsonData) {
     }
 
     getNode (nodeID) {
-      return (this._data.nodes[`ID${nodeID}`]);
+      return (_private_.data.nodes[`ID${nodeID}`]);
     }
 
     searchNodesByText (searchText) {
-      var _this = this;
-
-      var keys = Object.keys(this._data.nodes).filter(function (nodeKey) {
+      var keys = Object.keys(_private_.data.nodes).filter(function (nodeKey) {
         // majd figyelni kell, h a deleted-ek ne szerepeljenek a listában.
-        return ((!_this._data.nodes[nodeKey].deleted) && (_this._data.nodes[nodeKey].text.toLowerCase().indexOf(searchText.toLowerCase()) !== -1));
+        return ((!_private_.data.nodes[nodeKey].deleted) && (_private_.data.nodes[nodeKey].text.toLowerCase().indexOf(searchText.toLowerCase()) !== -1));
       });
       var result = [];
       for (var i in keys) {
         result.push({
-          id: _this._data.nodes[keys[i]].ID,
-          text: _this._data.nodes[keys[i]].text
+          id: _private_.data.nodes[keys[i]].ID,
+          text: _private_.data.nodes[keys[i]].text
         });
       }
 
@@ -492,11 +629,11 @@ function dataset (jsonData) {
     }
 
     _setNodePluginData (pluginName, nodeID, data) {
-      this._data.pluginData[pluginName].nodes[`ID${nodeID}`] = data;
+      _private_.data.pluginData[pluginName].nodes[`ID${nodeID}`] = data;
     }
 
     _getNodePluginData (pluginName, nodeID) {
-      return this._data.pluginData[pluginName].nodes[`ID${nodeID}`];
+      return _private_.data.pluginData[pluginName].nodes[`ID${nodeID}`];
     }
   }
 
@@ -506,7 +643,7 @@ function dataset (jsonData) {
 class OldDataset {
   constructor (jsonData) {
     if ((jsonData === undefined) || (jsonData.nextNodeID === undefined)) {
-      this._data = {
+      _private_.data = {
         nextNodeID: 2,
         nodes: {
           ID0: {
@@ -535,18 +672,18 @@ class OldDataset {
         pluginData: {}
       };
     } else {
-      this._data = jsonData;
+      _private_.data = jsonData;
     }
   }
 
   getJsonData () {
-    return JSON.stringify(this._data);
+    return JSON.stringify(_private_.data);
   }
 
   addNode (text) {
-    var nodeID = this._data.nextNodeID;
-    this._data.nextNodeID = this._data.nextNodeID + 1;
-    this._data.nodes[`ID${nodeID}`] = {
+    var nodeID = _private_.data.nextNodeID;
+    _private_.data.nextNodeID = _private_.data.nextNodeID + 1;
+    _private_.data.nodes[`ID${nodeID}`] = {
       ID: nodeID,
       text: text,
       links: [],
@@ -554,7 +691,7 @@ class OldDataset {
       deleted: false
     };
 
-    this._data.rootNodes[`ID${nodeID}`] = nodeID;
+    _private_.data.rootNodes[`ID${nodeID}`] = nodeID;
 
     return nodeID;
   }
@@ -581,7 +718,7 @@ class OldDataset {
   }
 
   getRootNodeIDs () {
-    return this._data.rootNodes;
+    return _private_.data.rootNodes;
   }
 
   findOrphanNodeIDs () {
@@ -594,8 +731,8 @@ class OldDataset {
     var rootOrHasParentNodes;
     var keys;
 
-    for (var key in this._data.nodes) {
-      ID = this._data.nodes[key].ID;
+    for (var key in _private_.data.nodes) {
+      ID = _private_.data.nodes[key].ID;
       if (!this.isDeleted(ID)) {
         childLinks = this.getChildLinks(ID);
         childLinkIDs = [];
@@ -607,8 +744,8 @@ class OldDataset {
     }
 
     rootOrHasParentNodes = [];
-    for (var key in this._data.rootNodes) {
-      rootOrHasParentNodes.push(this._data.rootNodes[key]);
+    for (var key in _private_.data.rootNodes) {
+      rootOrHasParentNodes.push(_private_.data.rootNodes[key]);
     }
 
     while (rootOrHasParentNodes.length > 0) {
@@ -647,7 +784,7 @@ class OldDataset {
     }
 
     for (key in orphanNodeKeys) {
-      orphanNodeIDs.push(this._data.nodes[key].ID);
+      orphanNodeIDs.push(_private_.data.nodes[key].ID);
     }
     return orphanNodeIDs;
   }
@@ -658,33 +795,33 @@ class OldDataset {
     var typePair;
     var linkIndex;
 
-    if (this._data.nodes[`ID${nodeID}`].deleted) {
+    if (_private_.data.nodes[`ID${nodeID}`].deleted) {
       return false;
     } else {
-      this._data.nodes[`ID${nodeID}`].deleted = true;
+      _private_.data.nodes[`ID${nodeID}`].deleted = true;
 
-      for (var i in this._data.nodes[`ID${nodeID}`].links) {
-        if (!this._data.nodes[`ID${nodeID}`].links[i].deleted) {
-          this._data.nodes[`ID${nodeID}`].links[i].deleted = true;
+      for (var i in _private_.data.nodes[`ID${nodeID}`].links) {
+        if (!_private_.data.nodes[`ID${nodeID}`].links[i].deleted) {
+          _private_.data.nodes[`ID${nodeID}`].links[i].deleted = true;
 
-          toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
-          type = this._data.nodes[`ID${nodeID}`].links[i].type;
+          toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
+          type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
           typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
 
-          linkIndex = this._data.nodes[`ID${toID}`].links.findIndex(function (link) {
+          linkIndex = _private_.data.nodes[`ID${toID}`].links.findIndex(function (link) {
             return ((link.toID === nodeID) && (link.type === typePair));
           });
-          this._data.nodes[`ID${toID}`].links[linkIndex].deleted = true;
+          _private_.data.nodes[`ID${toID}`].links[linkIndex].deleted = true;
 
           if (type === 'child') {
             if (!this.hasParentLinks(toID)) {
-              this._data.rootNodes[`ID${toID}`] = toID;
+              _private_.data.rootNodes[`ID${toID}`] = toID;
             }
           }
         }
       }
 
-      delete this._data.rootNodes[`ID${nodeID}`];
+      delete _private_.data.rootNodes[`ID${nodeID}`];
 
       return true;
     }
@@ -696,30 +833,30 @@ class OldDataset {
     var typePair;
     var linkIndex;
 
-    if (this._data.nodes[`ID${nodeID}`].deleted) {
-      this._data.nodes[`ID${nodeID}`].deleted = false;
+    if (_private_.data.nodes[`ID${nodeID}`].deleted) {
+      _private_.data.nodes[`ID${nodeID}`].deleted = false;
 
-      for (var i in this._data.nodes[`ID${nodeID}`].links) {
-        toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
+      for (var i in _private_.data.nodes[`ID${nodeID}`].links) {
+        toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
         if (!this.isDeleted(toID)) {
-          this._data.nodes[`ID${nodeID}`].links[i].deleted = false;
+          _private_.data.nodes[`ID${nodeID}`].links[i].deleted = false;
 
-          type = this._data.nodes[`ID${nodeID}`].links[i].type;
+          type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
           typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
 
-          linkIndex = this._data.nodes[`ID${toID}`].links.findIndex(function (link) {
+          linkIndex = _private_.data.nodes[`ID${toID}`].links.findIndex(function (link) {
             return ((link.toID === nodeID) && (link.type === typePair));
           });
-          this._data.nodes[`ID${toID}`].links[linkIndex].deleted = false;
+          _private_.data.nodes[`ID${toID}`].links[linkIndex].deleted = false;
 
           if (typePair === 'parent') {
-            delete this._data.rootNodes[`ID${toID}`];
+            delete _private_.data.rootNodes[`ID${toID}`];
           }
         }
       }
 
       if (!this.hasParentLinks(nodeID)) {
-        this._data.rootNodes[`ID${nodeID}`] = nodeID;
+        _private_.data.rootNodes[`ID${nodeID}`] = nodeID;
       }
 
       return true;
@@ -732,14 +869,14 @@ class OldDataset {
     var toID;
     var type;
 
-    if (this._data.nodes[`ID${nodeID}`].deleted) {
-      for (var i in this._data.nodes[`ID${nodeID}`].links) {
-        toID = this._data.nodes[`ID${nodeID}`].links[i].toID;
-        type = this._data.nodes[`ID${nodeID}`].links[i].type;
+    if (_private_.data.nodes[`ID${nodeID}`].deleted) {
+      for (var i in _private_.data.nodes[`ID${nodeID}`].links) {
+        toID = _private_.data.nodes[`ID${nodeID}`].links[i].toID;
+        type = _private_.data.nodes[`ID${nodeID}`].links[i].type;
         this.purgeLink(nodeID, toID, type);
       }
 
-      delete this._data.nodes[`ID${nodeID}`];
+      delete _private_.data.nodes[`ID${nodeID}`];
 
       return true;
     } else {
@@ -749,23 +886,23 @@ class OldDataset {
   }
 
   isLinked (nodeID1, nodeID2, type) { // Törölt státuszúakat is vizsgálja.
-    return (this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+    return (_private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
       return ((link.toID === nodeID2) && (link.type === type));
     }) > -1);
   }
 
   addChildLink (parentNodeID, childNodeID) {
-    var deleted = (this._data.nodes[`ID${parentNodeID}`].deleted || this._data.nodes[`ID${childNodeID}`].deleted);
+    var deleted = (_private_.data.nodes[`ID${parentNodeID}`].deleted || _private_.data.nodes[`ID${childNodeID}`].deleted);
 
-    delete this._data.rootNodes[`ID${childNodeID}`];
+    delete _private_.data.rootNodes[`ID${childNodeID}`];
 
     if (this.isLinked(parentNodeID, childNodeID, 'child')) {
       return false;
     } else {
-      this._data.nodes[`ID${parentNodeID}`].links.push(
+      _private_.data.nodes[`ID${parentNodeID}`].links.push(
         { toID: childNodeID, type: 'child', tags: [], deleted: deleted }
       );
-      this._data.nodes[`ID${childNodeID}`].links.push(
+      _private_.data.nodes[`ID${childNodeID}`].links.push(
         { toID: parentNodeID, type: 'parent', tags: [], deleted: deleted }
       );
 
@@ -784,15 +921,15 @@ class OldDataset {
   }
 
   addFriendLink (nodeID1, nodeID2) {
-    var deleted = (this._data.nodes[`ID${nodeID1}`].deleted || this._data.nodes[`ID${nodeID2}`].deleted);
+    var deleted = (_private_.data.nodes[`ID${nodeID1}`].deleted || _private_.data.nodes[`ID${nodeID2}`].deleted);
 
     if (this.isLinked(nodeID1, nodeID2, 'friend')) {
       return false;
     } else {
-      this._data.nodes[`ID${nodeID1}`].links.push(
+      _private_.data.nodes[`ID${nodeID1}`].links.push(
         { toID: nodeID2, type: 'friend', tags: [], deleted: deleted }
       );
-      this._data.nodes[`ID${nodeID2}`].links.push(
+      _private_.data.nodes[`ID${nodeID2}`].links.push(
         { toID: nodeID1, type: 'friend', tags: [], deleted: deleted }
       );
 
@@ -821,25 +958,25 @@ class OldDataset {
     var typePair = (type === 'child') ? 'parent' : ((type === 'parent') ? 'child' : type);
 
     if (this.isLinked(nodeID1, nodeID2, type)) {
-      linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+      linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
         return ((link.toID === nodeID2) && (link.type === type));
       });
-      this._data.nodes[`ID${nodeID1}`].links.splice(linkIndex, 1);
+      _private_.data.nodes[`ID${nodeID1}`].links.splice(linkIndex, 1);
 
-      linkIndex = this._data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+      linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
         return ((link.toID === nodeID1) && (link.type === typePair));
       });
-      this._data.nodes[`ID${nodeID2}`].links.splice(linkIndex, 1);
+      _private_.data.nodes[`ID${nodeID2}`].links.splice(linkIndex, 1);
 
       switch (type) {
         case 'child':
           if (!this.hasParentLinks(nodeID2)) {
-            this._data.rootNodes[`ID${nodeID2}`] = nodeID2;
+            _private_.data.rootNodes[`ID${nodeID2}`] = nodeID2;
           }
           break;
         case 'parent':
           if (!this.hasParentLinks(nodeID1)) {
-            this._data.rootNodes[`ID${nodeID1}`] = nodeID1;
+            _private_.data.rootNodes[`ID${nodeID1}`] = nodeID1;
           }
           break;
       }
@@ -851,7 +988,7 @@ class OldDataset {
   }
 
   isDeleted (nodeID) {
-    if (this._data.nodes[`ID${nodeID}`].deleted) {
+    if (_private_.data.nodes[`ID${nodeID}`].deleted) {
       return true;
     } else {
       return false;
@@ -859,7 +996,7 @@ class OldDataset {
   }
 
   isTagExists (tag) {
-    if (this._data.tags[tag]) {
+    if (_private_.data.tags[tag]) {
       return true;
     } else {
       return false;
@@ -867,32 +1004,32 @@ class OldDataset {
   }
 
   isNodeTagged (nodeID, tag) {
-    return (this._data.nodes[`ID${nodeID}`].tags.findIndex(function (elmement) {
+    return (_private_.data.nodes[`ID${nodeID}`].tags.findIndex(function (elmement) {
       return (element === tag);
     }) > -1);
   }
 
   addNodeTag (nodeID, tag) {
     if (!this.isTagExists(tag)) {
-      this._data.tags[tag] = tag;
+      _private_.data.tags[tag] = tag;
     }
 
     if (this.isNodeTagged(nodeID, tag)) {
       return false;
     } else {
-      this._data.nodes[`ID${nodeID}`].tags.push(tag);
+      _private_.data.nodes[`ID${nodeID}`].tags.push(tag);
 
       return true;
     }
   }
 
   isLinkTagged (nodeID1, nodeID2, type, tag) {
-    var linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+    var linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
       return ((link.toID === nodeID2) && (link.type === type));
     });
 
     if (linkIndex > -1) {
-      if (this._data.nodes[`ID${nodeID1}`].links[linkIndex].tags.findIndex(function (element) {
+      if (_private_.data.nodes[`ID${nodeID1}`].links[linkIndex].tags.findIndex(function (element) {
         return (element === tag);
       }
       ) > -1) {
@@ -918,30 +1055,30 @@ class OldDataset {
     }
 
     if (!this.isTagExists(tag)) {
-      this._data.tags[tag] = tag;
+      _private_.data.tags[tag] = tag;
     }
 
-    linkIndex = this._data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
+    linkIndex = _private_.data.nodes[`ID${nodeID1}`].links.findIndex(function (link) {
       return ((link.toID === nodeID2) && (link.type === type));
     });
-    this._data.nodes[`ID${nodeID1}`].links[linkIndex].tags.push(tag);
+    _private_.data.nodes[`ID${nodeID1}`].links[linkIndex].tags.push(tag);
 
-    linkIndex = this._data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
+    linkIndex = _private_.data.nodes[`ID${nodeID2}`].links.findIndex(function (link) {
       return ((link.toID === nodeID1) && (link.type === typePair));
     });
-    this._data.nodes[`ID${nodeID2}`].links[linkIndex].tags.push(tag);
+    _private_.data.nodes[`ID${nodeID2}`].links[linkIndex].tags.push(tag);
 
     return true;
   }
 
   getLinks (nodeID) {
-    return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+    return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
       return (link.deleted === false);
     });
   }
 
   getChildLinks (nodeID) {
-    return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+    return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
       return (link.type === 'child' && link.deleted === false);
     });
   }
@@ -951,7 +1088,7 @@ class OldDataset {
   }
 
   getParentLinks (nodeID) {
-    return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+    return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
       return (link.type === 'parent' && link.deleted === false);
     });
   }
@@ -961,7 +1098,7 @@ class OldDataset {
   }
 
   getFriendLinks (nodeID) {
-    return this._data.nodes[`ID${nodeID}`].links.filter(function (link) {
+    return _private_.data.nodes[`ID${nodeID}`].links.filter(function (link) {
       return (link.type === 'friend' && link.deleted === false);
     });
   }
@@ -972,21 +1109,21 @@ class OldDataset {
   }
 
   getNode (nodeID) {
-    return (this._data.nodes[`ID${nodeID}`]);
+    return (_private_.data.nodes[`ID${nodeID}`]);
   }
 
   searchNodesByText (searchText) {
     var _this = this;
 
-    var keys = Object.keys(this._data.nodes).filter(function (nodeKey) {
+    var keys = Object.keys(_private_.data.nodes).filter(function (nodeKey) {
       // majd figyelni kell, h a deleted-ek ne szerepeljenek a listában.
-      return ((!_this._data.nodes[nodeKey].deleted) && (_this._data.nodes[nodeKey].text.toLowerCase().indexOf(searchText.toLowerCase()) !== -1));
+      return ((!__private_.data.nodes[nodeKey].deleted) && (__private_.data.nodes[nodeKey].text.toLowerCase().indexOf(searchText.toLowerCase()) !== -1));
     });
     var result = [];
     for (var i in keys) {
       result.push({
-        id: _this._data.nodes[keys[i]].ID,
-        text: _this._data.nodes[keys[i]].text
+        id: __private_.data.nodes[keys[i]].ID,
+        text: __private_.data.nodes[keys[i]].text
       });
     }
 
@@ -994,11 +1131,11 @@ class OldDataset {
   }
 
   _setNodePluginData (pluginName, nodeID, data) {
-    this._data.pluginData[pluginName].nodes[`ID${nodeID}`] = data;
+    _private_.data.pluginData[pluginName].nodes[`ID${nodeID}`] = data;
   }
 
   _getNodePluginData (pluginName, nodeID) {
-    return this._data.pluginData[pluginName].nodes[`ID${nodeID}`];
+    return _private_.data.pluginData[pluginName].nodes[`ID${nodeID}`];
   }
 }
 

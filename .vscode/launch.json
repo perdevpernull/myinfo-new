@@ -7,7 +7,13 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Mocha All",
+      "name": "debug myinfoServer",
+      "program": "${workspaceFolder}/src/myinfoServer.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "debug mocha tests",
       "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
       "args": [
           "--timeout",
