@@ -5,26 +5,120 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "myinfoServer.dev.js",
+      "type": "node",
+      "protocol": "inspector",
+      "request": "launch",
+      "program": "${workspaceRoot}/src/myinfoServer.dev.js",
+      "stopOnEntry": false,
+      "args": [],
+      "cwd": "${workspaceRoot}",
+      "preLaunchTask": null,
+      "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/babel-node",
+      "runtimeArgs": [
+        "--nolazy"
+      ],
+      "disableOptimisticBPs": true,
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "console": "internalConsole",
+      "sourceMaps": true,
+      "outFiles": []
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "chrome",
+      "url": "http://localhost:8080/myinfo/",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "jest all",
       "type": "node",
       "request": "launch",
-      "name": "debug myinfoServer",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": ["--runInBand"],
+      "console": "integratedTerminal",
+      "windows": {
+        "program": "${workspaceFolder}/node_modules/jest/bin/jest",
+      }
+    },
+    {
+      "name": "--jest current.test.js",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": ["${relativeFile}"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "disableOptimisticBPs": true,
+      "windows": {
+        "program": "${workspaceFolder}/node_modules/jest/bin/jest",
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "--debug myinfoServer",
       "program": "${workspaceFolder}/src/myinfoServer.js"
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "debug mocha tests",
-      "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-      "args": [
-          "--timeout",
-          "999999",
-          "--colors",
-          "--require",
-          "@babel/register",
-          "${workspaceFolder}/src/**/*.test.js"
-      ],
+      "name": "--nodemon",
+      "runtimeExecutable": "nodemon",
+      "program": "${workspaceFolder}/src/server/server-dev.js",
+      "restart": true,
       "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen"
+      "internalConsoleOptions": "neverOpen",
+      "runtimeArgs": [
+        "--exec",
+        "${workspaceRoot}/node_modules/.bin/babel-node"
+      ],
+    },
+    {
+      "name": "--xxx2",
+      "type": "node",
+      "protocol": "inspector",
+      "request": "launch",
+      "program": "${workspaceRoot}/src/dataset.js",
+      "stopOnEntry": false,
+      "args": [],
+      "cwd": "${workspaceRoot}",
+      "preLaunchTask": null,
+      "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/babel-node",
+      "runtimeArgs": [
+        "--nolazy"
+      ],
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "console": "internalConsole",
+      "sourceMaps": true,
+      "outFiles": []
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "--Nodemon",
+      "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/nodemon",
+      "args": ["${workspaceRoot}/src/server/server-dev.js"],
+      "restart": true,
+      "protocol": "inspector",
+      "stopOnEntry": false,
+      "runtimeArgs": [
+        "--exec",
+        "${workspaceRoot}/node_modules/.bin/babel-node"
+      ],
+      "sourceMaps": true
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "--debug server",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/babel-node",
+      "args": ["${workspaceRoot}/src/server/server-dev.js"],
     }
   ]
 }

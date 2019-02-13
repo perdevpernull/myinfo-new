@@ -1,2 +1,5 @@
-var a = 'Try looking under "dataset" folder!';
-console.log(a);
+import { dataset } from './dataset/dataset';
+
+console.log('dataset is loaded');
+
+export { dataset };

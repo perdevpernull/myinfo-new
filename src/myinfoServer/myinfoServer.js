@@ -1,60 +1,12 @@
-var express = require('express');
-var session = require('express-session');
-var MemoryStore = require('memorystore')(session);
-var bodyParser = require('body-parser');
-var apiHandler = require('./apiHandler.js');
+import express from 'express';
+import session from 'express-session';
+import bodyParser from 'body-parser';
+import { apiHandler } from './apiHandler';
+import memoryStoreFactory from 'memorystore';
 
-/*
-const webpack = require('webpack');
-const webpackDevMiddleware = require('webpack-dev-middleware');
+const MemoryStore = memoryStoreFactory(session);
 
-// - -- --->
-
-const app = express();
-app.use(session({
-  store: new MemoryStore({
-    checkPeriod: 86400000 // prune expired entries every 24h
-  }),
-  resave: true,
-  saveUninitialized: true,
-  secret: 'mysecret'
-}));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-
-app.all('/*', function (req, res, next) {
-  if (req.session.userID) {
-    console.log(`Already logged in: req.session.userID: ${req.session.userID} (${JSON.stringify(req.params)})`);
-    next();
-  } else {
-    // ToDo: Redirecting to a login page.
-
-    // Instead of loggin in and setting the userID
-    // we set it to a default 0 value.
-    req.session.userID = 'default@myinfo.local';
-    console.log(`Logging in: req.session.userID: ${req.session.userID}`);
-    // Right now we assume we already logged in. So we proceed.
-    next();
-  }
-});
-
-app.all('/api/:version/:function', apiHandler);
-
-const config = require('../webpack.config.js');
-const compiler = webpack(config);
-
-const listeningPort = 8080;
-
-app.use(webpackDevMiddleware(compiler, {
-  publicPath: config.output.publicPath
-}));
-
-app.listen(listeningPort, () => {
-  console.log(`myinfoServer started on listeningPort (${listeningPort})`);
-});
-*/
-
-module.exports = function myinfoServer (listeningPort = 8000) {
+function myinfoServer () {
   const app = express();
   app.use(session({
     store: new MemoryStore({
@@ -86,9 +38,12 @@ module.exports = function myinfoServer (listeningPort = 8000) {
 
   app.all('/api/:version/:function', apiHandler);
 
-  app.all('*', (req, res, next) => {console.log('Other')});
-
-  return app.listen(listeningPort, () => {
-    console.log(`myinfoServer started on listeningPort (${listeningPort})`);
+  app.all('*', (req, res, next) => {
+    console.log('Other');
+    next();
   });
-};
+
+  return app;
+}
+
+export { myinfoServer };

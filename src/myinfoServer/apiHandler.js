@@ -1,8 +1,8 @@
-var apiSettings = require('./api/apiSettings.js');
-var apiUserdata = require('./api/apiUserdata.js');
-var apiDataset = require('./api/apiDataset.js');
+import { apiSettings } from './api/apiSettings';
+import { apiUserdata } from './api/apiUserdata';
+import { apiDataset } from './api/apiDataset.js';
 
-module.exports = function (req, res, next) {
+function apiHandler (req, res, next) {
   switch (req.params.function) {
     case 'settings':
       apiSettings(req, res, next);
@@ -17,4 +17,6 @@ module.exports = function (req, res, next) {
       console.log(`API Function UNKNOWN (${req.params.function})`);
       break;
   }
-};
+}
+
+export { apiHandler };

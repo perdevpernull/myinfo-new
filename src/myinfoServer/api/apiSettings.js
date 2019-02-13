@@ -1,7 +1,8 @@
-var fs = require('fs');
+import fs from 'fs';
+
 var baseDir = process.cwd() + '/public';
 
-module.exports = function apiSettings (req, res, next) {
+function apiSettings (req, res, next) {
   console.log(`req.params.version(${req.params.version}) req.method(${req.method})`);
   switch (req.params.version) {
     case 'v1':
@@ -30,4 +31,6 @@ module.exports = function apiSettings (req, res, next) {
       res.sendStatus(404);
       break;
   }
-};
+}
+
+export { apiSettings };
